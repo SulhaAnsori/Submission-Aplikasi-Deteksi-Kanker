@@ -1,17 +1,19 @@
 package com.dicoding.asclepius.view
 
-import android.Manifest
 import android.content.Intent
 import android.net.Uri
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import com.dicoding.asclepius.R
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.dicoding.asclepius.databinding.ActivityMainBinding
 import com.dicoding.asclepius.helper.ImageClassifierHelper
+import com.dicoding.asclepius.helper.Predict
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.tensorflow.lite.task.vision.classifier.Classifications
 
 class MainActivity : AppCompatActivity() {
@@ -55,11 +57,23 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     override fun onResults(results: List<Classifications>?, inferenceTime: Long) {
-                        results?.get(0)?.let { classification ->
-                            val message = "Prediction: ${classification.label}, Score: ${classification.score}%"
-                            showToast(message)
-                            moveToResult()
+                        lifecycleScope.launch(Dispatchers.Main) {
+                            results?.let { classification ->
+                                if (classification.isNotEmpty() && classification[0].categories.isNotEmpty()){
+                                    classification[0].categories.maxByOrNull { it.score }?.let {
+                                        val predict = Predict(
+                                            imageUri = imageUri,
+                                            label = it.label,
+                                            score = it.score,
+                                        )
+                                        moveToResult(predict)
+                                    }
+                                }
+
+
+                            }
                         }
+
                     }
                 }
             ).classifyStaticImage(imageUri)
@@ -67,8 +81,10 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private fun moveToResult() {
-        val intent = Intent(this, ResultActivity::class.java)
+    private fun moveToResult(predict: Predict) {
+        val intent = Intent(this, ResultActivity::class.java).apply {
+            putExtra(ResultActivity.PREDICT, predict)
+        }
         startActivity(intent)
     }
 
@@ -83,7 +99,7 @@ class MainActivity : AppCompatActivity() {
             currentImageUri = uri
             showImage()
         } else {
-            Log.d("Photo Picker", "No media selected")
+            Toast.makeText(this, "No media selected", Toast.LENGTH_SHORT).show()
         }
     }
 
